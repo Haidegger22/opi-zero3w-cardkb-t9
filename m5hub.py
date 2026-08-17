@@ -80,6 +80,7 @@ class Hub:
         self._t9_osd=None        # T9OSD-окно (лениво)
         self._t9_led_t=0         # таймер поддержания LED джойстика
         self._t9_caps=False      # следующее Т9-слово — с заглавной (Shift+буква или Sym+цифра)
+        self._t9_prev_layout='us'  # раскладка до включения Т9
         self._cx=self._cy=32768
 
         # Виртуальная позиция (вместо query_pointer)
@@ -328,13 +329,14 @@ class Hub:
                     time.sleep(0.1)
                     self._layout=self._real_layout()  # GNOME мог не дать переключить — честная синхронизация
                     print(f'[m5hub] Раскладка: {self._layout.upper()}')
-                # Fn+Backspace (0x8B) — гашение экрана (экономия зарядки)
-                if k==0x8B:
+                # Fn+0 (0x8A) — гашение экрана (перенесено с Fn+Backspace — тот случайно гасил экран)
+                if k==0x8A:
                     subprocess.run(['xset','dpms','force','off'], capture_output=True,
                                    env={'DISPLAY':os.environ.get('DISPLAY',':0')})
-                    print('[m5hub] 🌙 Экран погашен (Fn+Backspace)')
+                    print('[m5hub] 🌙 Экран погашен (Fn+0)')
                     self._kl=0
                     return
+                # Fn+Backspace (0x8B) — теперь обычное стирание (не гашение!)
                 # Fn+Enter (0xA3) — открыть «Обзор» (GNOME Overview / список программ)
                 if k==0xA3:
                     subprocess.run(['xdotool','key','Super_L'], capture_output=True,
@@ -361,7 +363,14 @@ class Hub:
         if not self._t9_active:
             if self._t9 is None:
                 self._t9=T9Engine()
+            self._t9_prev_layout=self._real_layout()  # запомнить, что было до Т9
             self._t9_active=True
+            # Т9 = русский ввод: принудительно ru — никакого смешения рус/лат
+            if self._real_layout()!='ru':
+                subprocess.run(['setxkbmap','ru'], capture_output=True,
+                               env={'DISPLAY':os.environ.get('DISPLAY',':0')})
+                time.sleep(0.15)
+            self._layout='ru'
             self._led_j(0,80,0)  # зелёный LED — Т9 включён (STM32G0 может гаснуть по таймауту — цикл будет обновлять)
             self._t9_led_t=0
             print('[m5hub] ⌨️ Т9 ВКЛ: 2-9 буквы, ←/→ выбор, Space/Enter подтвердить, Esc сброс, Fn+Tab выкл')
@@ -370,6 +379,12 @@ class Hub:
             self._t9_active=False
             self._t9.reset()
             self._t9_caps=False
+            # вернуть раскладку, которая была до включения Т9
+            if self._real_layout()!=self._t9_prev_layout:
+                subprocess.run(['setxkbmap',self._t9_prev_layout], capture_output=True,
+                               env={'DISPLAY':os.environ.get('DISPLAY',':0')})
+                time.sleep(0.15)
+            self._layout=self._t9_prev_layout
             self._led_j(0,0,0)   # LED погашен — Т9 выключен
             print('[m5hub] ⌨️ Т9 ВЫКЛ')
             self._t9_osd_hide()
@@ -484,11 +499,13 @@ class Hub:
                 xtest.fake_input(self.d,X.KeyPress,65); self.d.flush()
                 xtest.fake_input(self.d,X.KeyRelease,65); self.d.flush()
         finally:
-            if real!='ru':
-                subprocess.run(['setxkbmap',real], capture_output=True,
+            # в Т9-режиме всегда возвращаемся на ru (Т9 = русский ввод), иначе — как было
+            target='ru' if self._t9_active else real
+            if self._real_layout()!=target:
+                subprocess.run(['setxkbmap',target], capture_output=True,
                                env={'DISPLAY':os.environ.get('DISPLAY',':0')})
                 time.sleep(0.2)  # дать X-серверу применить раскладку — иначе XTest-события теряются
-        self._layout=real  # синхронизация с реальной раскладкой (GNOME мог переключить сам)
+        self._layout=target  # синхронизация с реальной раскладкой
 
     def _t9_osd_show(self):
         if self._t9_osd is None:
@@ -595,6 +612,7 @@ CKM = {
     # ── Control keys ──
     0x1B: 0xFF1B,  # Esc
     0x08: 0xFF08,  # Backspace (Del key in normal mode)
+    0x8B: 0xFF08,  # Fn+Backspace — тоже стирание (гашение экрана перенесено на Fn+0)
     0x7F: 0xFFFF,  # Delete (Shift+Del)
     0x09: 0xFF09,  # Tab
     0x0D: 0xFF0D,  # Enter
