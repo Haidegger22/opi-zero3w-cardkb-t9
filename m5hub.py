@@ -402,6 +402,13 @@ class Hub:
         if k in SYM_D:
             self._t9_caps=True
             t.add_digit(SYM_D[k]); self._t9_osd_show(); return True
+        if k==0x30:                  # 0 — тоже пробел (подтвердить + пробел, или просто пробел)
+            if t.seq:
+                w=t.confirm()
+                if w: self._t9_type(w,True)
+                self._t9_osd_hide(); return True
+            self._kv(0x0020,1,0x20); self._kv(0x0020,0,0x20)
+            self._kl=k; return True
         if 0x32<=k<=0x39:            # 2-9 — цифры набора
             t.add_digit(chr(k)); self._t9_osd_show(); return True
         if k==0x08 and t.seq:        # Backspace — стереть цифру
@@ -678,7 +685,7 @@ class T9Engine:
                     f'<b><span size="large">{self.mt_text() or "_"}</span></b> '
                     f'<span color="#aaa">· цифра — буква (быстрый повтор — след.) · Enter — готово</span>')
         if not self.seq:
-            return '<span color="#777">Т9: 2-9 буквы · Backspace стереть · ←/→ выбор · Space/Enter подтвердить · Fn+Tab выкл</span>'
+            return '<span color="#777">Т9: 2-9 буквы · Backspace стереть · ←/→ выбор · Space/0 подтвердить · Fn+Tab выкл</span>'
         if not self.cands:
             return f'<span color="#f66">нет слова: {self.seq}</span> <span color="#aaa">— Enter: ручной ввод</span>'
         parts=[]
@@ -706,8 +713,18 @@ class T9OSD:
         self.win.set_decorated(False); self.win.set_keep_above(True)
         self.win.set_accept_focus(False); self.win.set_can_focus(False)
         self.win.set_skip_taskbar_hint(True); self.win.set_skip_pager_hint(True)
-        self.win.set_size_request(520,48)
+        # Полупрозрачность 50%: rgba-визуал + draw с альфой (текст остаётся непрозрачным)
         screen=self.win.get_screen()
+        vis=screen.get_rgba_visual()
+        if vis is not None:
+            self.win.set_visual(vis)
+        self.win.set_app_paintable(True)
+        def _draw(w,cr):
+            cr.set_source_rgba(0.12,0.12,0.12,0.5)  # тёмный фон, альфа 50%
+            cr.paint()
+            return False
+        self.win.connect('draw',_draw)
+        self.win.set_size_request(520,48)
         sw,sh=screen.get_width(),screen.get_height()
         self.win.move((sw-520)//2,sh-60)
         self.label=Gtk.Label(); self.label.set_use_markup(True)
