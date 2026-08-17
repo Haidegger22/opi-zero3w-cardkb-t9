@@ -74,9 +74,6 @@ class Hub:
         self._t={'j':0,'s':0,'k':0}
         self._sb=False; self._sf=False; self._sp=0
         self._kl=0
-        self._bs_last=0.0      # last Backspace timestamp
-        self._bs_repeat=False  # auto-repeat active
-        self._bs_next=0.0      # next repeat timestamp
         self._layout='us'        # current keyboard layout
         self._t9=None            # T9Engine (лениво, при первом включении)
         self._t9_active=False    # Т9-режим (Fn+Tab)
@@ -323,19 +320,6 @@ class Hub:
                 # DEBUG: log raw codes to /tmp/cardkb.log
                 with open('/tmp/cardkb.log','a') as f:
                     f.write(f'{time.time():.3f} raw=0x{k:02X} prev=0x{self._kl:02X}\n')
-                # Double-tap Backspace detection
-                now=time.time()
-                if k==0x08:
-                    if self._bs_last>0 and now-self._bs_last<0.8:
-                        self._bs_repeat=True
-                        self._bs_next=now+0.2
-                        print("[m5hub] BS auto-repeat (double-tap)")
-                    self._bs_last=now
-                elif k and k!=0:
-                    if self._bs_repeat:
-                        print("[m5hub] BS auto-repeat off")
-                    self._bs_repeat=False
-                    self._bs_last=0
                 # Fn+Space (0xAF) — переключение раскладки US/RU
                 if k==0xAF:
                     self._layout='ru' if self._layout=='us' else 'us'
@@ -552,10 +536,6 @@ class Hub:
                 if t-self._t['j']>=0.030: self._j(); self._t['j']=t
                 if t-self._t['s']>=0.020: self._s(); self._t['s']=t
                 if t-self._t['k']>=0.060: self._k(); self._t['k']=t
-                # Backspace auto-repeat
-                if self._bs_repeat and t>=self._bs_next:
-                    self._kv(0xFF08,1,0x08); self._kv(0xFF08,0,0x08)
-                    self._bs_next=t+0.05
                 # Поддержание зелёного LED джойстика, пока Т9 активен (STM32G0 гаснет по таймауту)
                 if self._t9_active and t-self._t9_led_t>=2.0:
                     self._led_j(0,80,0)
