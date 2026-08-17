@@ -329,14 +329,13 @@ class Hub:
                     time.sleep(0.1)
                     self._layout=self._real_layout()  # GNOME мог не дать переключить — честная синхронизация
                     print(f'[m5hub] Раскладка: {self._layout.upper()}')
-                # Fn+0 (0x8A) — гашение экрана (перенесено с Fn+Backspace — тот случайно гасил экран)
-                if k==0x8A:
+                # Fn+Backspace (0x8B) — гашение экрана (экономия зарядки)
+                if k==0x8B:
                     subprocess.run(['xset','dpms','force','off'], capture_output=True,
                                    env={'DISPLAY':os.environ.get('DISPLAY',':0')})
-                    print('[m5hub] 🌙 Экран погашен (Fn+0)')
+                    print('[m5hub] 🌙 Экран погашен (Fn+Backspace)')
                     self._kl=0
                     return
-                # Fn+Backspace (0x8B) — теперь обычное стирание (не гашение!)
                 # Fn+Enter (0xA3) — открыть «Обзор» (GNOME Overview / список программ)
                 if k==0xA3:
                     subprocess.run(['xdotool','key','Super_L'], capture_output=True,
@@ -612,7 +611,6 @@ CKM = {
     # ── Control keys ──
     0x1B: 0xFF1B,  # Esc
     0x08: 0xFF08,  # Backspace (Del key in normal mode)
-    0x8B: 0xFF08,  # Fn+Backspace — тоже стирание (гашение экрана перенесено на Fn+0)
     0x7F: 0xFFFF,  # Delete (Shift+Del)
     0x09: 0xFF09,  # Tab
     0x0D: 0xFF0D,  # Enter
