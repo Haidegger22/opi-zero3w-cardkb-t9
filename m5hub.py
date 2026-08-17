@@ -697,8 +697,9 @@ class T9Engine:
 
     def osd_text(self):
         if self.mt:
-            return (f'<span color="#6f6" size="large">✍️</span> '
-                    f'<b><span size="large">{self.mt_text() or "_"}</span></b> '
+            # multi-tap: слово красным (режим добавления нового слова)
+            return (f'<span color="#f55" size="large">✍️</span> '
+                    f'<b><span color="#f55" size="large">{self.mt_text() or "_"}</span></b> '
                     f'<span color="#aaa">· цифра — буква (быстрый повтор — след.) · Enter — готово</span>')
         if not self.seq:
             return '<span color="#777">Т9: 2-9 буквы · Backspace стереть · ←/→ выбор · Space/0 подтвердить · Fn+Tab выкл</span>'
