@@ -325,6 +325,8 @@ class Hub:
                     self._layout='ru' if self._layout=='us' else 'us'
                     subprocess.run(['setxkbmap',self._layout], capture_output=True,
                                    env={'DISPLAY':os.environ.get('DISPLAY',':0')})
+                    time.sleep(0.1)
+                    self._layout=self._real_layout()  # GNOME мог не дать переключить — честная синхронизация
                     print(f'[m5hub] Раскладка: {self._layout.upper()}')
                 # Fn+Backspace (0x8B) — гашение экрана (экономия зарядки)
                 if k==0x8B:
@@ -432,6 +434,19 @@ class Hub:
         except Exception as e:
             print('[m5hub] Словарь не сохранился:',e)
 
+    def _real_layout(self):
+        """Реальная раскладка X-сервера (setxkbmap -query) — не полагаемся на self._layout,
+        потому что GNOME/mutter переключает раскладку сам (input-sources)."""
+        try:
+            r=subprocess.run(['setxkbmap','-query'],capture_output=True,text=True,
+                             env={'DISPLAY':os.environ.get('DISPLAY',':0')})
+            for ln in r.stdout.splitlines():
+                if ln.strip().startswith('layout:'):
+                    return ln.split()[-1]
+        except Exception:
+            pass
+        return self._layout
+
     def _t9_type(self,word,space):
         """Ввод русского слова через XTest: временно ru-раскладка, затем вернуть как было.
         Используем физические keycode ЙЦУКЕН — они не зависят от кэша раскладки python-xlib."""
@@ -439,12 +454,11 @@ class Hub:
         RU_KC={'й':24,'ц':25,'у':26,'к':27,'е':28,'н':29,'г':30,'ш':31,'щ':32,'з':33,'х':34,'ъ':35,
                'ф':38,'ы':39,'в':40,'а':41,'п':42,'р':43,'о':44,'л':45,'д':46,'ж':47,'э':48,'ё':49,
                'я':52,'ч':53,'с':54,'м':55,'и':56,'т':57,'ь':58,'б':59,'ю':60}
-        prev=self._layout
+        real=self._real_layout()
         try:
-            if prev!='ru':
+            if real!='ru':
                 subprocess.run(['setxkbmap','ru'], capture_output=True,
                                env={'DISPLAY':os.environ.get('DISPLAY',':0')})
-                self._layout='ru'
                 time.sleep(0.15)  # дать X-серверу обновить раскладку
                 # ВАЖНО: НЕ обновляем кэш python-xlib! _kv() полагается на us-кэш
                 # (латинские keysym'ы) и вводит физические keycode — реальная раскладка
@@ -463,11 +477,11 @@ class Hub:
                 xtest.fake_input(self.d,X.KeyPress,65); self.d.flush()
                 xtest.fake_input(self.d,X.KeyRelease,65); self.d.flush()
         finally:
-            if prev!='ru':
-                subprocess.run(['setxkbmap','us'], capture_output=True,
+            if real!='ru':
+                subprocess.run(['setxkbmap',real], capture_output=True,
                                env={'DISPLAY':os.environ.get('DISPLAY',':0')})
-                self._layout='us'
                 time.sleep(0.2)  # дать X-серверу применить раскладку — иначе XTest-события теряются
+        self._layout=real  # синхронизация с реальной раскладкой (GNOME мог переключить сам)
 
     def _t9_osd_show(self):
         if self._t9_osd is None:
