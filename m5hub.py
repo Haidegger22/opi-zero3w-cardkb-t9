@@ -10,7 +10,7 @@ m5hub.py v9 — стабильная версия
 """
 
 import os, fcntl, time, ctypes, subprocess, collections, statistics, math, json, queue, threading
-from Xlib import display, X, protocol
+from Xlib import display, X
 from Xlib.ext import xtest
 
 try:
@@ -69,12 +69,9 @@ class Hub:
         self.sw=self.d.screen().width_in_pixels
         self.sh=self.d.screen().height_in_pixels
         print(f"[m5hub] Экран: {self.sw}x{self.sh}")
-        # Приоритет клавиатуры: запоминаем активное окно, возвращаем фокус, если он потерян
-        self._net_active=self.d.intern_atom('_NET_ACTIVE_WINDOW')
-        self._last_win=0
 
         self.go=True
-        self._t={'j':0,'s':0,'k':0,'f':0}
+        self._t={'j':0,'s':0,'k':0}
         self._sb=False; self._sf=False; self._sp=0
         self._kl=0
         self._layout='us'        # current keyboard layout
@@ -317,60 +314,8 @@ class Hub:
         except:
             pass
 
-    def _win_name(self,wid):
-        """Имя окна по XID (для отсева рабочего стола/mutter guard)."""
-        try:
-            w=self.d.create_resource_object('window',wid)
-            for atom in ('_NET_WM_NAME','WM_NAME'):
-                p=w.get_full_property(self.d.intern_atom(atom),X.AnyPropertyType)
-                if p:
-                    v=p.value
-                    if isinstance(v,bytes): return v.decode('utf-8','ignore')
-                    return str(v)
-        except Exception:
-            pass
-        return ''
-
-    def _focus_refresh(self):
-        """Запомнить активное окно, если это не рабочий стол."""
-        try:
-            p=self.ro.get_full_property(self._net_active,X.AnyPropertyType)
-            if p and p.value and p.value[0]:
-                name=self._win_name(p.value[0])
-                if name and name not in ('mutter guard window','Desktop','desktop'):
-                    self._last_win=p.value[0]
-        except Exception:
-            pass
-
-    def _focus_ensure(self):
-        """Если фокус потерян (рабочий стол/нет окна) — вернуть его последнему окну.
-        Возвращает True, если клавиша потрачена на активацию окна."""
-        try:
-            p=self.ro.get_full_property(self._net_active,X.AnyPropertyType)
-            active=p.value[0] if p and p.value else 0
-            bad=False
-            if not active:
-                bad=True
-            else:
-                name=self._win_name(active)
-                if not name or name in ('mutter guard window','Desktop','desktop'):
-                    bad=True
-            if bad and self._last_win:
-                ev=protocol.event.ClientMessage(window=self._last_win,
-                    client_type=self._net_active,
-                    data=(32,[1,X.CurrentTime,0,0,0]))
-                self.ro.send_event(ev,event_mask=X.SubstructureRedirectMask|X.SubstructureNotifyMask)
-                self.d.flush()
-                return True
-        except Exception:
-            pass
-        return False
-
     def _k(self):
         try:
-            # приоритет клавиатуры: если фокус потерян — вернуть его (первое нажатие уходит на активацию)
-            if self._focus_ensure():
-                return
             d=self.rr(2,0x5F,1); k=d[0] if d else 0
             if k!=self._kl:
                 # DEBUG: log raw codes to /tmp/cardkb.log
@@ -628,8 +573,6 @@ class Hub:
                 if t-self._t['j']>=0.030: self._j(); self._t['j']=t
                 if t-self._t['s']>=0.020: self._s(); self._t['s']=t
                 if t-self._t['k']>=0.060: self._k(); self._t['k']=t
-                # запоминаем активное окно раз в секунду (для приоритета клавиатуры)
-                if t-self._t['f']>=1.0: self._focus_refresh(); self._t['f']=t
                 # Поддержание зелёного LED джойстика, пока Т9 активен (STM32G0 гаснет по таймауту)
                 if self._t9_active and t-self._t9_led_t>=2.0:
                     self._led_j(0,80,0)
